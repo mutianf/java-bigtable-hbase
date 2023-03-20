@@ -44,6 +44,7 @@ import io.grpc.Status;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.time.Duration;
 import java.util.regex.Pattern;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.util.VersionInfo;
@@ -338,6 +339,8 @@ public class BigtableOptionsFactory {
   @InternalApi("for testing only")
   public static final String BIGTABLE_TEST_DATA_IP_REGEX = "google.bigtable.test.data.ip.regex";
 
+  public static final String BIGTABLE_IDLE_TIMEOUT_MS = "google.bigtable.idle.timeout.ms";
+
   /**
    * fromConfiguration.
    *
@@ -421,6 +424,13 @@ public class BigtableOptionsFactory {
             }
           });
     }
+
+    long idleTimeout =
+        configuration.getLong(
+            configuration.get(BIGTABLE_IDLE_TIMEOUT_MS),
+            BigtableOptions.BIGTABLE_DEFAULT_IDLE_TIMEOUT_MS);
+    Preconditions.checkArgument(idleTimeout <= Duration.ofHours(1).toMillis());
+    bigtableOptionsBuilder.setIdleTimeout(idleTimeout);
 
     return bigtableOptionsBuilder.build();
   }

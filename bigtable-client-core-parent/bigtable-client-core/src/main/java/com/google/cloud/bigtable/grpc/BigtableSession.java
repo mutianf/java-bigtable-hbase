@@ -382,7 +382,10 @@ public class BigtableSession implements Closeable {
     Preconditions.checkState(watchdog == null, "Watchdog already setup");
 
     watchdog =
-        new Watchdog(Clock.SYSTEM, options.getRetryOptions().getReadPartialRowTimeoutMillis());
+        new Watchdog(
+            Clock.SYSTEM,
+            options.getRetryOptions().getReadPartialRowTimeoutMillis(),
+            options.getIdleTimeout());
     watchdog.start(BigtableSessionSharedThreadPools.getInstance().getRetryExecutor());
 
     return new WatchdogInterceptor(

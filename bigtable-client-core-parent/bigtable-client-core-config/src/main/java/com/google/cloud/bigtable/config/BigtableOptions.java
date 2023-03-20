@@ -73,6 +73,8 @@ public class BigtableOptions implements Serializable, Cloneable {
   @InternalApi("For internal usage only")
   public static final int BIGTABLE_DATA_CHANNEL_COUNT_DEFAULT = getDefaultDataChannelCount();
 
+  public static final long BIGTABLE_DEFAULT_IDLE_TIMEOUT_MS = TimeUnit.MINUTES.toMillis(10);
+
   /**
    * Constant <code>BIGTABLE_APP_PROFILE_DEFAULT=""</code>, defaults to the server default app
    * profile
@@ -269,6 +271,11 @@ public class BigtableOptions implements Serializable, Cloneable {
       return this;
     }
 
+    public Builder setIdleTimeout(long idleTimeout) {
+      options.idleTimeout = idleTimeout;
+      return this;
+    }
+
     /** Apply emulator settings from the relevant environment variable, if set. */
     private void applyEmulatorEnvironment() {
       // Look for a host:port for the emulator.
@@ -378,6 +385,8 @@ public class BigtableOptions implements Serializable, Cloneable {
   private RetryOptions retryOptions;
   private boolean useBatch;
   private String tracingCookie;
+
+  private long idleTimeout;
 
   @VisibleForTesting
   BigtableOptions() {}
@@ -531,6 +540,10 @@ public class BigtableOptions implements Serializable, Cloneable {
     return tracingCookie;
   }
 
+  public long getIdleTimeout() {
+    return idleTimeout;
+  }
+
   /** {@inheritDoc} */
   @Override
   public boolean equals(Object obj) {
@@ -558,7 +571,8 @@ public class BigtableOptions implements Serializable, Cloneable {
         && Objects.equals(callOptionsConfig, other.callOptionsConfig)
         && Objects.equals(useBatch, other.useBatch)
         && Objects.equals(channelConfigurator, other.channelConfigurator)
-        && Objects.equals(tracingCookie, other.tracingCookie);
+        && Objects.equals(tracingCookie, other.tracingCookie)
+        && Objects.equals(idleTimeout, other.idleTimeout);
   }
 
   /** {@inheritDoc} */
@@ -583,6 +597,7 @@ public class BigtableOptions implements Serializable, Cloneable {
         .add("useCachedDataPool", useCachedDataPool)
         .add("useBatch", useBatch)
         .add("tracingCookie", tracingCookie)
+        .add("idleTimeout", idleTimeout)
         .toString();
   }
 

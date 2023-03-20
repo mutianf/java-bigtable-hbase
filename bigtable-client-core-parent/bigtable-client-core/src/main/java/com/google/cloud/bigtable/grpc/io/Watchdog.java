@@ -17,6 +17,7 @@ package com.google.cloud.bigtable.grpc.io;
 
 import com.google.api.client.util.Clock;
 import com.google.api.core.InternalApi;
+import com.google.cloud.bigtable.config.BigtableOptions;
 import com.google.cloud.bigtable.config.Logger;
 import com.google.common.base.Preconditions;
 import io.grpc.ClientCall;
@@ -65,8 +66,6 @@ public class Watchdog implements Runnable {
 
   private static final Logger LOG = new Logger(Watchdog.class);
 
-  // By default kill the stream after 10 minutes of inactivity
-  private static final long DEFAULT_IDLE_TIMEOUT_MS = TimeUnit.MINUTES.toMillis(10);
   private static final long MIN_CHECK_PERIOD_MS = TimeUnit.SECONDS.toMillis(10);
 
   // Dummy value to convert the ConcurrentHashMap into a Set
@@ -81,7 +80,7 @@ public class Watchdog implements Runnable {
   private ScheduledFuture<?> scheduledFuture;
 
   public Watchdog(Clock clock, long waitTimeoutMs) {
-    this(clock, waitTimeoutMs, DEFAULT_IDLE_TIMEOUT_MS);
+    this(clock, waitTimeoutMs, BigtableOptions.BIGTABLE_DEFAULT_IDLE_TIMEOUT_MS);
   }
 
   public Watchdog(Clock clock, long waitTimeoutMs, long idleTimeoutMs) {

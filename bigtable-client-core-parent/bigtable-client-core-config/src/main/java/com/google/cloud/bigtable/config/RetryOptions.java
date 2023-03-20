@@ -201,6 +201,7 @@ public class RetryOptions implements Serializable, Cloneable {
   @Deprecated private int streamingBufferSize;
   private int readPartialRowTimeoutMillis;
   private int maxScanTimeoutRetries;
+
   private Set<Status.Code> statusToRetryOn;
   /**
    * Constructor for RetryOptions.
