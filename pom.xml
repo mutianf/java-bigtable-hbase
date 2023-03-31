@@ -56,7 +56,7 @@ limitations under the License.
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
     <!-- core dependency versions -->
-    <bigtable.version>2.20.3-SNAPSHOT</bigtable.version>
+    <bigtable.version>2.20.3-flow-control-preview1-SNAPSHOT</bigtable.version>
     <google-cloud-bigtable-emulator.version>0.157.0</google-cloud-bigtable-emulator.version>
     <bigtable-client-core.version>1.28.0</bigtable-client-core.version>
     <grpc-conscrypt.version>2.5.2</grpc-conscrypt.version>
@@ -122,7 +122,38 @@ limitations under the License.
     <url>https://github.com/googleapis/java-bigtable-hbase/issues</url>
   </issueManagement>
 
+  <distributionManagement>
+    <snapshotRepository>
+      <id>artifact-registry</id>
+      <url>artifactregistry://us-maven.pkg.dev/cloud-bigtable-ecosystem/bigtable-flow-control-preview</url>
+    </snapshotRepository>
+    <repository>
+      <id>artifact-registry</id>
+      <url>artifactregistry://us-maven.pkg.dev/cloud-bigtable-ecosystem/bigtable-flow-control-preview</url>
+    </repository>
+  </distributionManagement>
+
+  <repositories>
+    <repository>
+      <id>artifact-registry</id>
+      <url>artifactregistry://us-maven.pkg.dev/cloud-bigtable-ecosystem/bigtable-flow-control-preview</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>true</enabled>
+      </snapshots>
+    </repository>
+  </repositories>
+
   <build>
+    <extensions>
+      <extension>
+        <groupId>com.google.cloud.artifactregistry</groupId>
+        <artifactId>artifactregistry-maven-wagon</artifactId>
+        <version>2.1.0</version>
+      </extension>
+    </extensions>
     <testResources>
       <testResource>
         <directory>src/test/resources</directory>
