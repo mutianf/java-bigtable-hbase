@@ -314,4 +314,11 @@ public class BigtableOptionsFactory {
   @BetaApi("This API is not yet stable and may change in the future")
   public static final String MANAGED_CONNECTION_WARNING =
       "google.bigtable.managed.connection.warning";
+
+  /**
+   * Turn on a feature that will reduce the likelihood of BulkMutation overloading a Cloud Bigtable
+   * server.
+   */
+  public static final String BIGTABLE_ENABLE_BULK_MUTATION_FLOW_CONTROL =
+      "google.bigtable.enable.bulk.mutation.flow.control";
 }

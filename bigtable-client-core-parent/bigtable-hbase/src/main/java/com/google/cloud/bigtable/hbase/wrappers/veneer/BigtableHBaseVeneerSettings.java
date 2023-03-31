@@ -28,6 +28,7 @@ import static com.google.cloud.bigtable.hbase.BigtableOptionsFactory.BIGTABLE_BU
 import static com.google.cloud.bigtable.hbase.BigtableOptionsFactory.BIGTABLE_BULK_THROTTLE_TARGET_MS_DEFAULT;
 import static com.google.cloud.bigtable.hbase.BigtableOptionsFactory.BIGTABLE_DATA_CHANNEL_COUNT_KEY;
 import static com.google.cloud.bigtable.hbase.BigtableOptionsFactory.BIGTABLE_EMULATOR_HOST_KEY;
+import static com.google.cloud.bigtable.hbase.BigtableOptionsFactory.BIGTABLE_ENABLE_BULK_MUTATION_FLOW_CONTROL;
 import static com.google.cloud.bigtable.hbase.BigtableOptionsFactory.BIGTABLE_HOST_KEY;
 import static com.google.cloud.bigtable.hbase.BigtableOptionsFactory.BIGTABLE_MUTATE_RPC_ATTEMPT_TIMEOUT_MS_KEY;
 import static com.google.cloud.bigtable.hbase.BigtableOptionsFactory.BIGTABLE_MUTATE_RPC_TIMEOUT_MS_KEY;
@@ -632,7 +633,7 @@ public class BigtableHBaseVeneerSettings extends BigtableHBaseSettings {
 
     builder.setBatchingSettings(batchingSettingsBuilder.build());
 
-    if (Boolean.parseBoolean(configuration.get(BIGTABLE_BUFFERED_MUTATOR_ENABLE_THROTTLING))) {
+    if (configuration.getBoolean(BIGTABLE_BUFFERED_MUTATOR_ENABLE_THROTTLING, false)) {
       int latencyMs =
           configuration.getInt(
               BIGTABLE_BUFFERED_MUTATOR_THROTTLING_THRESHOLD_MILLIS,
@@ -640,6 +641,9 @@ public class BigtableHBaseVeneerSettings extends BigtableHBaseSettings {
 
       builder.enableLatencyBasedThrottling(latencyMs);
     }
+
+    builder.setServerInitiatedFlowControl(
+        configuration.getBoolean(BIGTABLE_ENABLE_BULK_MUTATION_FLOW_CONTROL, false));
   }
 
   private void configureBulkReadRowsSettings(
