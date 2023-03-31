@@ -21,11 +21,11 @@ import static com.google.cloud.bigtable.hbase.BigtableOptionsFactory.APP_PROFILE
 import static com.google.cloud.bigtable.hbase.BigtableOptionsFactory.BIGTABLE_ADMIN_HOST_KEY;
 import static com.google.cloud.bigtable.hbase.BigtableOptionsFactory.BIGTABLE_BUFFERED_MUTATOR_ENABLE_THROTTLING;
 import static com.google.cloud.bigtable.hbase.BigtableOptionsFactory.BIGTABLE_BUFFERED_MUTATOR_MAX_MEMORY_KEY;
-import static com.google.cloud.bigtable.hbase.BigtableOptionsFactory.BIGTABLE_BUFFERED_MUTATOR_THROTTLE_TARGET_CPU;
 import static com.google.cloud.bigtable.hbase.BigtableOptionsFactory.BIGTABLE_BUFFERED_MUTATOR_THROTTLING_THRESHOLD_MILLIS;
 import static com.google.cloud.bigtable.hbase.BigtableOptionsFactory.BIGTABLE_BULK_AUTOFLUSH_MS_KEY;
 import static com.google.cloud.bigtable.hbase.BigtableOptionsFactory.BIGTABLE_BULK_MAX_REQUEST_SIZE_BYTES;
 import static com.google.cloud.bigtable.hbase.BigtableOptionsFactory.BIGTABLE_BULK_MAX_ROW_KEY_COUNT;
+import static com.google.cloud.bigtable.hbase.BigtableOptionsFactory.BIGTABLE_BULK_MUTATION_FLOW_CONTROL_TARGET_CPU;
 import static com.google.cloud.bigtable.hbase.BigtableOptionsFactory.BIGTABLE_BULK_THROTTLE_TARGET_MS_DEFAULT;
 import static com.google.cloud.bigtable.hbase.BigtableOptionsFactory.BIGTABLE_DATA_CHANNEL_COUNT_KEY;
 import static com.google.cloud.bigtable.hbase.BigtableOptionsFactory.BIGTABLE_EMULATOR_HOST_KEY;
@@ -446,6 +446,9 @@ public class BigtableHBaseVeneerSettings extends BigtableHBaseSettings {
     final InstantiatingGrpcChannelProvider.Builder channelProvider =
         ((InstantiatingGrpcChannelProvider) stubSettings.getTransportChannelProvider()).toBuilder();
 
+    // TODO: disable direct path until the headers can be parsed
+    channelProvider.setAttemptDirectPath(false);
+
     if (configuration.getBoolean(BIGTABLE_USE_PLAINTEXT_NEGOTIATION, false)) {
       // Make sure to avoid clobbering the old Configurator
       @SuppressWarnings("rawtypes")
@@ -643,8 +646,13 @@ public class BigtableHBaseVeneerSettings extends BigtableHBaseSettings {
       builder.enableLatencyBasedThrottling(latencyMs);
     }
 
-    builder.setServerInitiatedFlowControl(
-        configuration.getBoolean(BIGTABLE_ENABLE_BULK_MUTATION_FLOW_CONTROL, false));
+    String targetCpuStr = configuration.get(BIGTABLE_BULK_MUTATION_FLOW_CONTROL_TARGET_CPU);
+    if (!Strings.isNullOrEmpty(targetCpuStr)) {
+      builder.enableCpuBasedServerInitiatedFlowControl(Integer.parseInt(targetCpuStr));
+    } else {
+      builder.setServerInitiatedFlowControl(
+          configuration.getBoolean(BIGTABLE_ENABLE_BULK_MUTATION_FLOW_CONTROL, false));
+    }
   }
 
   private void configureBulkReadRowsSettings(

@@ -322,8 +322,11 @@ public class BigtableOptionsFactory {
   public static final String BIGTABLE_ENABLE_BULK_MUTATION_FLOW_CONTROL =
       "google.bigtable.enable.bulk.mutation.flow.control";
 
-  /** Sets the target CPU is CPU based throttling is enabled. */
+  /**
+   * Sets the target CPU if bulk mutation flow control is enabled. The client will rate limit its
+   * QPS based on the target CPU and the current CPU usage of the Bigtable server.
+   */
   @BetaApi("This API is not yet stable and may change in the future")
-  public static final String BIGTABLE_BUFFERED_MUTATOR_THROTTLE_TARGET_CPU =
-      "google.bigtable.buffered.mutator.cpu.throttling.target";
+  public static final String BIGTABLE_BULK_MUTATION_FLOW_CONTROL_TARGET_CPU =
+      "google.bigtable.bulk.mutation.flow.control.target.cpu";
 }
