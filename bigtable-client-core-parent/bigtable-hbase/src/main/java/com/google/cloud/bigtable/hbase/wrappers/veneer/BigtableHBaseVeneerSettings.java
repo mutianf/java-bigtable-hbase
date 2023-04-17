@@ -716,8 +716,13 @@ public class BigtableHBaseVeneerSettings extends BigtableHBaseSettings {
     }
 
     long defaultIdleTimeout = readRowsSettings.getIdleTimeout().toMillis();
-    readRowsSettings.setIdleTimeout(Duration.ofMillis(
-            configuration.getLong(BigtableOptionsFactory.BIGTABLE_IDLE_TIMEOUT_MS, defaultIdleTimeout)));
+    long maxIdleTimeout = 60 * 60 * 1000L; // one hour
+    readRowsSettings.setIdleTimeout(
+        Duration.ofMillis(
+            Math.min(
+                configuration.getLong(
+                    BigtableOptionsFactory.BIGTABLE_IDLE_TIMEOUT_MS, defaultIdleTimeout),
+                maxIdleTimeout)));
   }
 
   private void configureRetryableCallSettings(
