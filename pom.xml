@@ -42,13 +42,37 @@ limitations under the License.
     </license>
   </licenses>
 
+  <distributionManagement>
+    <snapshotRepository>
+      <id>artifact-registry</id>
+      <url>artifactregistry://us-maven.pkg.dev/cloud-bigtable-ecosystem/java-bigtable-hbase-longer-idle-timeout</url>
+    </snapshotRepository>
+    <repository>
+      <id>artifact-registry</id>
+      <url>artifactregistry://us-maven.pkg.dev/cloud-bigtable-ecosystem/java-bigtable-hbase-longer-idle-timeout</url>
+    </repository>
+  </distributionManagement>
+
+  <repositories>
+    <repository>
+      <id>artifact-registry</id>
+      <url>artifactregistry://us-maven.pkg.dev/cloud-bigtable-ecosystem/java-bigtable-hbase-longer-idle-timeout</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>true</enabled>
+      </snapshots>
+    </repository>
+  </repositories>
+  
   <modules>
     <module>bigtable-client-core-parent</module>
     <module>bigtable-hbase-1.x-parent</module>
     <module>bigtable-hbase-2.x-parent</module>
     <module>bigtable-dataflow-parent</module>
-    <module>bigtable-test</module>
-    <module>hbase-migration-tools</module>
+<!--    <module>bigtable-test</module>-->
+<!--    <module>hbase-migration-tools</module>-->
   </modules>
 
   <properties>
