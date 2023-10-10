@@ -80,6 +80,7 @@ import com.google.cloud.bigtable.data.v2.models.Query;
 import com.google.cloud.bigtable.data.v2.models.Row;
 import com.google.cloud.bigtable.data.v2.stub.BigtableBatchingCallSettings;
 import com.google.cloud.bigtable.data.v2.stub.BigtableBulkReadRowsCallSettings;
+import com.google.cloud.bigtable.data.v2.stub.SafeResponseObserver;
 import com.google.cloud.bigtable.hbase.BigtableConfiguration;
 import com.google.cloud.bigtable.hbase.BigtableExtendedConfiguration;
 import com.google.cloud.bigtable.hbase.BigtableHBaseVersion;
@@ -92,9 +93,18 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import io.grpc.CallOptions;
+import io.grpc.Channel;
+import io.grpc.ClientCall;
+import io.grpc.ClientInterceptor;
+import io.grpc.ForwardingClientCall;
+import io.grpc.ForwardingClientCallListener;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.Metadata;
+import io.grpc.MethodDescriptor;
 import java.io.ByteArrayInputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -102,15 +112,22 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
 import java.security.PrivateKey;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.logging.Logger;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.threeten.bp.Duration;
+import org.threeten.bp.Instant;
 
 /** For internal use only - public for technical reasons. */
 @InternalApi("For internal usage only")
@@ -445,6 +462,14 @@ public class BigtableHBaseVeneerSettings extends BigtableHBaseSettings {
 
     final InstantiatingGrpcChannelProvider.Builder channelProvider =
         ((InstantiatingGrpcChannelProvider) stubSettings.getTransportChannelProvider()).toBuilder();
+
+    // Inject interceptor for extra logging
+    channelProvider.setInterceptorProvider(
+        () -> {
+          OutstandingRpcLogger interceptor = new OutstandingRpcLogger();
+          interceptor.startLogging();
+          return ImmutableList.of(interceptor);
+        });
 
     if (configuration.getBoolean(BIGTABLE_USE_PLAINTEXT_NEGOTIATION, false)) {
       // Make sure to avoid clobbering the old Configurator
@@ -938,6 +963,77 @@ public class BigtableHBaseVeneerSettings extends BigtableHBaseSettings {
 
     public Optional<Duration> getOperationTimeout() {
       return operationTimeout;
+    }
+  }
+
+  static class OutstandingRpcLogger implements ClientInterceptor {
+    private static final Logger LOGGER = Logger.getLogger(SafeResponseObserver.class.getName());
+    private static final AtomicLong channelCounter = new AtomicLong();
+    private final long channelNum;
+    private final ConcurrentHashMap<String, Instant> outstandingRpcs = new ConcurrentHashMap<>();
+
+    public OutstandingRpcLogger() {
+      channelNum = channelCounter.getAndIncrement();
+      LOGGER.info("injecting grpc RPC tracker for channel " + channelNum);
+    }
+
+    public void startLogging() {
+      Thread thread =
+          new Thread(
+              () -> {
+                while (true) {
+                  try {
+                    Thread.sleep(TimeUnit.MINUTES.toMillis(1));
+                  } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                  }
+
+                  Instant now = Instant.now();
+                  int stuck = 0;
+                  List<String> stuckKeys = new ArrayList<>();
+                  for (Map.Entry<String, Instant> e : outstandingRpcs.entrySet()) {
+                    if (Duration.between(e.getValue(), now).compareTo(Duration.ofMinutes(1)) >= 0) {
+                      stuck++;
+                      stuckKeys.add(e.getKey());
+                    }
+                  }
+                  if (stuck > 0) {
+                    LOGGER.warning(
+                        String.format("[%d] grpc Outstanding started RPCs: %d", channelNum, stuck));
+                    LOGGER.warning(
+                        String.format(
+                            "[%d] stuck keys: %s", channelNum, String.join(",", stuckKeys)));
+                  }
+                }
+              },
+              "grpc-outstanding RPC counter thread");
+      thread.setDaemon(true);
+      thread.start();
+    }
+
+    @Override
+    public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+        MethodDescriptor<ReqT, RespT> methodDescriptor, CallOptions callOptions, Channel channel) {
+      String method = methodDescriptor.getBareMethodName();
+      UUID uuid = UUID.randomUUID();
+      String key = method + "-" + uuid;
+      outstandingRpcs.put(key, Instant.now());
+      return new ForwardingClientCall.SimpleForwardingClientCall<ReqT, RespT>(
+          channel.newCall(methodDescriptor, callOptions)) {
+        @Override
+        public void start(Listener<RespT> responseListener, Metadata headers) {
+          Listener<RespT> instrumentedListener =
+              new ForwardingClientCallListener.SimpleForwardingClientCallListener<RespT>(
+                  responseListener) {
+                @Override
+                public void onClose(io.grpc.Status status, Metadata trailers) {
+                  outstandingRpcs.remove(key);
+                  super.onClose(status, trailers);
+                }
+              };
+          super.start(instrumentedListener, headers);
+        }
+      };
     }
   }
 }

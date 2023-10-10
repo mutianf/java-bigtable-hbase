@@ -21,6 +21,7 @@ import com.google.cloud.bigtable.beam.CloudBigtableScanConfiguration;
 import com.google.cloud.bigtable.beam.TemplateUtils;
 import com.google.cloud.bigtable.thirdparty.org.apache.hadoop.hbase.mapreduce.ResultSerialization;
 import java.io.Serializable;
+
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.PipelineResult;
 import org.apache.beam.sdk.extensions.gcp.options.GcpOptions;
@@ -42,6 +43,8 @@ import org.apache.beam.sdk.values.KV;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.serializer.WritableSerialization;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Beam job to export a Bigtable table to a set of SequenceFiles. Afterwards, the files can be
