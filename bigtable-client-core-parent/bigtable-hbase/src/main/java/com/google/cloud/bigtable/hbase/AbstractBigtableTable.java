@@ -308,7 +308,11 @@ public abstract class AbstractBigtableTable implements Table {
     try (Scope scope = TRACER.withSpan(span)) {
       ResultScanner scanner;
       if (scan.getCaching() == -1) {
-        scanner = clientWrapper.readRows(hbaseAdapter.adapt(scan));
+        if (getConfiguration().getBoolean("google.bigtable.skip.large.rows", false)) {
+          scanner = clientWrapper.readRowsWithDLQ(hbaseAdapter.adapt(scan));
+        } else {
+          scanner = clientWrapper.readRows(hbaseAdapter.adapt(scan));
+        }
       } else {
         Query.QueryPaginator paginator =
             hbaseAdapter.adapt(scan).createPaginator(scan.getCaching());

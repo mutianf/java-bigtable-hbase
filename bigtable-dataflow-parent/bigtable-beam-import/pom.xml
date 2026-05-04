@@ -63,6 +63,13 @@ limitations under the License.
       </exclusions>
     </dependency>
 
+    <!-- Force SLF4J to print to console so we can see the pipeline errors! -->
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-simple</artifactId>
+      <version>2.0.16</version>
+    </dependency>
+
     <dependency>
       <groupId>com.google.cloud.bigdataoss</groupId>
       <artifactId>gcs-connector</artifactId>

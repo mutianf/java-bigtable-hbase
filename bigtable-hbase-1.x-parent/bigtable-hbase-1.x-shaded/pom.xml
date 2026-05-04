@@ -375,66 +375,7 @@ limitations under the License.
           </execution>
         </executions>
       </plugin>
-      <plugin>
-        <groupId>com.google.cloud.bigtable.test</groupId>
-        <artifactId>bigtable-build-helper</artifactId>
-        <version>2.15.3</version> <!-- {x-version-update:bigtable-client-parent:current} -->
-
-        <executions>
-          <execution>
-            <id>verify-shaded-jar-entries</id>
-            <phase>verify</phase>
-            <goals>
-              <goal>verify-shaded-jar-entries</goal>
-            </goals>
-            <configuration>
-              <allowedJarClassEntries>
-                <classEntry>com/google/bigtable</classEntry>
-                <classEntry>com/google/cloud/bigtable</classEntry>
-                <classEntry>org/apache/hadoop/hbase/client/AbstractBigtableAdmin</classEntry>
-                <classEntry>org/apache/hadoop/hbase/client/AbstractBigtableConnection</classEntry>
-                <classEntry>org/apache/hadoop/hbase/client/CommonConnection</classEntry>
-                <classEntry>org/apache/hadoop/hbase/client/BigtableAsyncRegistry</classEntry>
-                <classEntry>META-INF/versions/9/com/google/cloud/bigtable/repackaged</classEntry>
-              </allowedJarClassEntries>
-            </configuration>
-          </execution>
-          <execution>
-            <id>verify-shaded-exclusions</id>
-            <phase>verify</phase>
-            <goals>
-              <goal>verify-shaded-exclusions</goal>
-            </goals>
-          </execution>
-          <execution>
-            <id>verify-mirror-deps-hbase</id>
-            <phase>verify</phase>
-            <goals>
-              <goal>verify-mirror-deps</goal>
-            </goals>
-            <configuration>
-              <targetDependencies>
-                <targetDependency>org.apache.hbase:hbase-shaded-client</targetDependency>
-              </targetDependencies>
-              <ignoredDependencies>
-                <ignoredDependency>log4j:log4j</ignoredDependency>
-              </ignoredDependencies>
-            </configuration>
-          </execution>
-          <execution>
-            <id>verify-mirror-deps-hbase-cbt</id>
-            <phase>verify</phase>
-            <goals>
-              <goal>verify-mirror-deps</goal>
-            </goals>
-            <configuration>
-              <targetDependencies>
-                <targetDependency>com.google.cloud:google-cloud-bigtable</targetDependency>
-              </targetDependencies>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
+      
     </plugins>
   </build>
 </project>

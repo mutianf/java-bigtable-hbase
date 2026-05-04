@@ -85,6 +85,11 @@ public interface DataClientWrapper extends AutoCloseable {
   /** Read multiple {@link Result}s into an in-memory list, in key order. */
   ApiFuture<List<Result>> readRowsAsync(Query request);
 
+  /**
+   * Reads rows using the DLQ fallback logic for large rows.
+   */
+  ResultScanner readRowsWithDLQ(Query request);
+
   /** Read {@link Result} asynchronously, and pass them to a stream observer to be processed. */
   // TODO: once veneer is implemented update this with gax's ResponseObserver.
   void readRowsAsync(Query request, ResponseObserver<Result> observer);

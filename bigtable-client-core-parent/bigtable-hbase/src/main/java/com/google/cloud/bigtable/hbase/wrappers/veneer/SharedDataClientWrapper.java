@@ -94,6 +94,11 @@ class SharedDataClientWrapper implements DataClientWrapper {
   }
 
   @Override
+  public ResultScanner readRowsWithDLQ(Query request) {
+    return delegate.readRowsWithDLQ(request);
+  }
+
+  @Override
   public ApiFuture<List<Result>> readRowsAsync(Query request) {
     return delegate.readRowsAsync(request);
   }

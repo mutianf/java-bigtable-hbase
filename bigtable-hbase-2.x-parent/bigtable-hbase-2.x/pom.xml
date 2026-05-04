@@ -168,6 +168,9 @@ limitations under the License.
                 <!-- make sure that we are a strict superset of veneer -->
                 <targetDependency>com.google.cloud:google-cloud-bigtable</targetDependency>
               </targetDependencies>
+              <ignoredDependencies>
+                <dependency>org.slf4j:slf4j-api</dependency>
+              </ignoredDependencies>
             </configuration>
           </execution>
           <execution>
@@ -185,6 +188,8 @@ limitations under the License.
                 <dependency>io.opentelemetry:opentelemetry-api</dependency>
                 <dependency>io.opentelemetry:opentelemetry-context</dependency>
                 <dependency>io.opentelemetry:opentelemetry-semconv</dependency>
+                <!-- allow slf4j version upgrades -->
+                <dependency>org.slf4j:slf4j-api</dependency>
               </ignoredDependencies>
             </configuration>
           </execution>

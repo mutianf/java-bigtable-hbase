@@ -53,9 +53,25 @@ import org.apache.hadoop.hbase.filter.FilterList.Operator;
  */
 @InternalApi("For internal usage only")
 public class RowResultAdapter implements RowAdapter<Result> {
-
   private static final byte[] EMPTY_VALUE = new byte[0];
   private static final String SCAN_MARKER_ROW_LABEL = "bigtable-scan-marker-row";
+
+  private final java.util.function.Consumer<ByteString> onLargeRowCallback;
+
+  public RowResultAdapter() {
+    this.onLargeRowCallback = null;
+  }
+
+  public RowResultAdapter(java.util.function.Consumer<ByteString> onLargeRowCallback) {
+    this.onLargeRowCallback = onLargeRowCallback;
+  }
+
+  @Override
+  public void onLargeRow(ByteString rowKey) {
+    if (this.onLargeRowCallback != null) {
+      this.onLargeRowCallback.accept(rowKey);
+    }
+  }
 
   @Override
   public RowBuilder<Result> createRowBuilder() {

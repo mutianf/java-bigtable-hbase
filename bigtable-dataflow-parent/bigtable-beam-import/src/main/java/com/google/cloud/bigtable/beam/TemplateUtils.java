@@ -96,6 +96,9 @@ public class TemplateUtils {
                     options.getBigtableStopRow(),
                     options.getBigtableMaxVersions(),
                     options.getBigtableFilter()));
+    if (options.getSkipLargeRows()) {
+        configBuilder.withConfiguration("google.bigtable.skip.large.rows", "true");
+    }
     return configBuilder.build();
   }
 }

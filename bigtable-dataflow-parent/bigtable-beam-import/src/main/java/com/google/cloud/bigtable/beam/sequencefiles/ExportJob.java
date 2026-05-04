@@ -43,6 +43,12 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.mapreduce.ResultSerialization;
 import org.apache.hadoop.io.serializer.WritableSerialization;
+import org.apache.beam.sdk.values.PCollectionTuple;
+import org.apache.beam.sdk.values.TupleTag;
+import org.apache.beam.sdk.values.TupleTagList;
+import org.apache.beam.sdk.transforms.DoFn;
+import org.apache.beam.sdk.transforms.ParDo;
+import org.apache.hadoop.hbase.util.Bytes;
 
 /**
  * Beam job to export a Bigtable table to a set of SequenceFiles. Afterwards, the files can be
@@ -179,6 +185,13 @@ public class ExportJob {
 
     @SuppressWarnings("unused")
     void setRetryIdleTimeout(boolean retryIdleTimeout);
+
+    @Description("Enable skipping large rows and routing them to a DLQ.")
+    @Default.Boolean(false)
+    boolean getSkipLargeRows();
+
+    @SuppressWarnings("unused")
+    void setSkipLargeRows(boolean skipLargeRows);
   }
 
   public static void main(String[] args) {
@@ -216,11 +229,65 @@ public class ExportJob {
             Result.class,
             ResultSerialization.class);
 
-    Pipeline pipeline = Pipeline.create(Utils.tweakOptions(opts));
+    ValueProvider<String> dlqPrefixStr = NestedValueProvider.of(opts.getFilenamePrefix(), new SerializableFunction<String, String>() {
+      @Override
+      public String apply(String input) {
+        return input + "-dlq";
+      }
+    });
+    FilePathPrefix dlqPrefix = new FilePathPrefix(destinationPath, dlqPrefixStr);
 
+    SequenceFileSink<ImmutableBytesWritable, Result> dlqSink =
+        new SequenceFileSink<>(
+            destinationPath,
+            DefaultFilenamePolicy.fromStandardParameters(dlqPrefix, null, "", false),
+            ImmutableBytesWritable.class,
+            WritableSerialization.class,
+            Result.class,
+            ResultSerialization.class);
+
+    Pipeline pipeline = Pipeline.create(Utils.tweakOptions(opts));
     CloudBigtableScanConfiguration config = TemplateUtils.buildExportConfig(opts);
-    pipeline
+    
+    ValueProvider<String> projectId = opts.getBigtableProject();
+    ValueProvider<String> instanceId = opts.getBigtableInstanceId();
+    ValueProvider<String> tableId = opts.getBigtableTableId();
+
+    org.apache.beam.sdk.values.PCollection<Result> processedRows = pipeline
         .apply("Read table", Read.from(CloudBigtableIO.read(config)))
+        .apply("Process Large Rows", ParDo.of(new DoFn<Result, Result>() {
+
+            @ProcessElement
+            public void processElement(ProcessContext c) {
+                Result r = c.element();
+                if (r.containsColumn(Bytes.toBytes("__BEAM_DLQ_LARGE_ROW__"), Bytes.toBytes(""))) {
+                    com.google.bigtable.repackaged.com.google.protobuf.ByteString rowKey = 
+                        com.google.bigtable.repackaged.com.google.protobuf.ByteString.copyFrom(r.getRow());
+                    
+                    com.google.bigtable.repackaged.com.google.cloud.bigtable.data.v2.BigtableDataClient client = null;
+                    try {
+                        client = com.google.bigtable.repackaged.com.google.cloud.bigtable.data.v2.BigtableDataClient.create(projectId.get(), instanceId.get());
+                        com.google.bigtable.repackaged.com.google.cloud.bigtable.data.v2.models.Row largeRow = 
+                            com.google.bigtable.repackaged.com.google.cloud.bigtable.data.v2.stub.readrows.LargeRowPaginationUtil.readLargeRow(
+                                client, tableId.get(), rowKey, null);
+                        if (largeRow != null) {
+                            Result fullResult = com.google.cloud.bigtable.hbase.adapters.Adapters.ROW_ADAPTER.adaptResponse(largeRow);
+                            c.output(fullResult);
+                        }
+                    } catch (Exception e) {
+                        throw new RuntimeException("Failed to read large row", e);
+                    } finally {
+                        if (client != null) {
+                            try { client.close(); } catch (Exception ex) {}
+                        }
+                    }
+                } else {
+                    c.output(r);
+                }
+            }
+        }));
+
+    processedRows
         .apply("Format results", MapElements.via(new ResultToKV()))
         .apply("Write", WriteFiles.to(sink));
 

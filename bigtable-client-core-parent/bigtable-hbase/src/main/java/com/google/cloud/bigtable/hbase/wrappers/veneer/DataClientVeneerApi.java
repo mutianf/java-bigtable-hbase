@@ -152,6 +152,12 @@ public class DataClientVeneerApi implements DataClientWrapper {
   }
 
   @Override
+  public ResultScanner readRowsWithDLQ(Query request) {
+    return new DLQRowResultScanner(
+        request, delegate, createScanCallContext());
+  }
+
+  @Override
   public ApiFuture<List<Result>> readRowsAsync(Query request) {
     return delegate
         .readRowsCallable(RESULT_ADAPTER)
@@ -386,6 +392,108 @@ public class DataClientVeneerApi implements DataClientWrapper {
 
         scannerResultMeter.mark();
         return iterator.next();
+      }
+    }
+
+    @Override
+    public void close() {
+      serverStream.cancel();
+    }
+
+    public boolean renewLease() {
+      return true;
+    }
+  }
+
+  private static class DLQRowResultScanner extends AbstractClientScanner {
+    private final Meter scannerResultMeter =
+        BigtableClientMetrics.meter(BigtableClientMetrics.MetricLevel.Info, "scanner.results");
+    private final Timer scannerResultTimer =
+        BigtableClientMetrics.timer(
+            BigtableClientMetrics.MetricLevel.Debug, "scanner.results.latency");
+
+    private final ServerStream<com.google.cloud.bigtable.data.v2.models.Row> serverStream;
+    private final Iterator<Result> iterator;
+    private final Queue<ByteString> skippedLargeKeys;
+    private Result bufferedResult = null;
+
+    DLQRowResultScanner(Query request, BigtableDataClient delegate, GrpcCallContext scanCallContext) {
+      this.skippedLargeKeys = new java.util.concurrent.ConcurrentLinkedQueue<>();
+      
+      com.google.cloud.bigtable.data.v2.models.DefaultRowAdapter adapter = 
+          new com.google.cloud.bigtable.data.v2.models.DefaultRowAdapter() {
+            @Override
+            public void onLargeRow(ByteString rowKey) {
+              skippedLargeKeys.add(rowKey);
+            }
+          };
+
+      this.serverStream = delegate.skipLargeRowsCallable(adapter).call(request, scanCallContext);
+          
+      // Manually map Row -> Result
+      java.util.Iterator<com.google.cloud.bigtable.data.v2.models.Row> rowIterator = this.serverStream.iterator();
+      
+      this.iterator = new java.util.Iterator<Result>() {
+        @Override
+        public boolean hasNext() {
+          return rowIterator.hasNext();
+        }
+
+        @Override
+        public Result next() {
+          return com.google.cloud.bigtable.hbase.adapters.Adapters.ROW_ADAPTER.adaptResponse(rowIterator.next());
+        }
+      };
+    }
+
+    @Override
+    public Result next() {
+      try (Context ignored = scannerResultTimer.time()) {
+        if (bufferedResult == null && iterator.hasNext()) {
+          bufferedResult = iterator.next();
+        }
+
+        ByteString largeKey = skippedLargeKeys.peek();
+
+        java.util.function.Supplier<Result> buildMarkerResult = () -> {
+          org.apache.hadoop.hbase.Cell dlqMarker = org.apache.hadoop.hbase.CellUtil.createCell(
+            largeKey.toByteArray(), 
+            org.apache.hadoop.hbase.util.Bytes.toBytes("__BEAM_DLQ_LARGE_ROW__"), 
+            org.apache.hadoop.hbase.util.Bytes.toBytes(""), 
+            System.currentTimeMillis(), 
+            org.apache.hadoop.hbase.KeyValue.Type.Put.getCode(), 
+            new byte[0]
+          );
+          return Result.create(java.util.Arrays.asList(dlqMarker));
+        };
+
+        if (bufferedResult != null && largeKey != null) {
+          ByteString healthyKey = RESULT_ADAPTER.getKey(bufferedResult);
+          
+          if (com.google.common.primitives.UnsignedBytes.lexicographicalComparator().compare(largeKey.toByteArray(), healthyKey.toByteArray()) < 0) {
+            skippedLargeKeys.poll();
+            return buildMarkerResult.get();
+          } else {
+            Result toReturn = bufferedResult;
+            bufferedResult = null;
+            scannerResultMeter.mark();
+            return toReturn;
+          }
+        }
+
+        if (largeKey != null) {
+          skippedLargeKeys.poll();
+          return buildMarkerResult.get();
+        }
+
+        if (bufferedResult != null) {
+          Result toReturn = bufferedResult;
+          bufferedResult = null;
+          scannerResultMeter.mark();
+          return toReturn;
+        }
+
+        return null; // EOF
       }
     }
 

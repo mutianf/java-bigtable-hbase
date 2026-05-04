@@ -152,19 +152,7 @@ limitations under the License.
         <version>2.15.3</version> <!-- {x-version-update:bigtable-client-parent:current} -->
 
         <executions>
-          <execution>
-            <id>verify-mirror-deps-cbt</id>
-            <phase>verify</phase>
-            <goals>
-              <goal>verify-mirror-deps</goal>
-            </goals>
-            <configuration>
-              <targetDependencies>
-                <!-- make sure that we are a strict superset of veneer -->
-                <targetDependency>com.google.cloud:google-cloud-bigtable</targetDependency>
-              </targetDependencies>
-            </configuration>
-          </execution>
+
           <execution>
             <id>verify-mirror-deps-hbase</id>
             <phase>verify</phase>

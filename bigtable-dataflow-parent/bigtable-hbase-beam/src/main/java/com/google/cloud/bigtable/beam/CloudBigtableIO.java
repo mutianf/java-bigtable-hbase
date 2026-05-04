@@ -62,6 +62,13 @@ import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.sdk.values.PDone;
 import org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.collect.ImmutableList;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
+import java.util.Queue;
+import java.util.LinkedList;
+import java.util.Arrays;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
@@ -673,6 +680,7 @@ public class CloudBigtableIO {
     private final AtomicLong rowsRead = new AtomicLong();
     private final ByteKeyRangeTracker rangeTracker;
     private transient Result lastScannedRow;
+    private transient Queue<Result> dlqResults = new LinkedList<>();
 
     private final AtomicInteger attempt = new AtomicInteger(3);
 
@@ -740,16 +748,20 @@ public class CloudBigtableIO {
     }
 
     private boolean tryAdvance() throws IOException {
-      Result row = scanner.next();
-      lastScannedRow = row;
-      if (row != null && rangeTracker.tryReturnRecordAt(true, ByteKey.copyFrom(row.getRow()))) {
-        current = row;
-        rowsRead.addAndGet(1l);
-        return true;
-      } else {
-        current = null;
-        rangeTracker.markDone();
-        return false;
+      try {
+        Result row = scanner.next();
+        lastScannedRow = row;
+        if (row != null && rangeTracker.tryReturnRecordAt(true, ByteKey.copyFrom(row.getRow()))) {
+          current = row;
+          rowsRead.addAndGet(1l);
+          return true;
+        } else {
+          current = null;
+          rangeTracker.markDone();
+          return false;
+        }
+      } catch (Exception e) {
+        throw e;
       }
     }
 
@@ -807,7 +819,7 @@ public class CloudBigtableIO {
       ByteKey splitKey;
       try {
         splitKey = rangeTracker.getRange().interpolateKey(fraction);
-      } catch (IllegalArgumentException e) {
+      } catch (IllegalArgumentException | IllegalStateException e) {
         READER_LOG.info(
             "{}: Failed to interpolate key for fraction {}.", rangeTracker.getRange(), fraction);
         return null;

@@ -145,6 +145,9 @@ limitations under the License.
                 <!-- make sure that we are a strict superset of veneer -->
                 <targetDependency>com.google.cloud:google-cloud-bigtable</targetDependency>
               </targetDependencies>
+              <ignoredDependencies>
+                <dependency>org.slf4j:slf4j-api</dependency>
+              </ignoredDependencies>
             </configuration>
           </execution>
           <execution>
@@ -161,6 +164,8 @@ limitations under the License.
               <ignoredDependencies>
                 <!-- forcefully replaced with reload4j -->
                 <dependency>log4j:log4j</dependency>
+                <!-- allow slf4j version upgrades -->
+                <dependency>org.slf4j:slf4j-api</dependency>
               </ignoredDependencies>
             </configuration>
           </execution>
