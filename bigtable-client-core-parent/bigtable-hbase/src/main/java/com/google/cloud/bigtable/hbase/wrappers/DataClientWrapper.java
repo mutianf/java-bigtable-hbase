@@ -82,13 +82,11 @@ public interface DataClientWrapper extends AutoCloseable {
   /** Perform a scan over {@link Result}s, in key order. */
   ResultScanner readRows(Query request);
 
+  /** Perform a scan over {@link Result}s, in key order, with a custom RowAdapter. */
+  ResultScanner readRows(Query request, com.google.cloud.bigtable.data.v2.models.RowAdapter<com.google.cloud.bigtable.data.v2.models.Row> adapter);
+
   /** Read multiple {@link Result}s into an in-memory list, in key order. */
   ApiFuture<List<Result>> readRowsAsync(Query request);
-
-  /**
-   * Reads rows using the DLQ fallback logic for large rows.
-   */
-  ResultScanner readRowsWithDLQ(Query request);
 
   /** Read {@link Result} asynchronously, and pass them to a stream observer to be processed. */
   // TODO: once veneer is implemented update this with gax's ResponseObserver.

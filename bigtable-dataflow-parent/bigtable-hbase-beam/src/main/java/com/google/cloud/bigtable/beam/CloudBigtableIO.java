@@ -680,7 +680,7 @@ public class CloudBigtableIO {
     private final AtomicLong rowsRead = new AtomicLong();
     private final ByteKeyRangeTracker rangeTracker;
     private transient Result lastScannedRow;
-    private transient Queue<Result> dlqResults = new LinkedList<>();
+    private transient java.util.Queue<Result> dlqResults = new java.util.concurrent.ConcurrentLinkedQueue<>();
 
     private final AtomicInteger attempt = new AtomicInteger(3);
 
@@ -710,10 +710,27 @@ public class CloudBigtableIO {
 
       connection = ConnectionFactory.createConnection(config);
       Scan scan = source.getConfiguration().getScanValueProvider().get();
-      scanner =
-          connection
-              .getTable(TableName.valueOf(source.getConfiguration().getTableId()))
-              .getScanner(scan);
+      org.apache.hadoop.hbase.client.Table table = connection.getTable(TableName.valueOf(source.getConfiguration().getTableId()));
+      
+      if (config.getBoolean("google.bigtable.skip.large.rows", false) && table instanceof com.google.cloud.bigtable.hbase.AbstractBigtableTable) {
+          com.google.bigtable.repackaged.com.google.cloud.bigtable.data.v2.models.DefaultRowAdapter adapter = new com.google.bigtable.repackaged.com.google.cloud.bigtable.data.v2.models.DefaultRowAdapter() {
+              @Override
+              public void onLargeRow(com.google.bigtable.repackaged.com.google.protobuf.ByteString rowKey) {
+                  org.apache.hadoop.hbase.Cell dlqMarker = org.apache.hadoop.hbase.CellUtil.createCell(
+                      rowKey.toByteArray(), 
+                      org.apache.hadoop.hbase.util.Bytes.toBytes("__BEAM_DLQ_LARGE_ROW__"), 
+                      org.apache.hadoop.hbase.util.Bytes.toBytes(""), 
+                      System.currentTimeMillis(), 
+                      org.apache.hadoop.hbase.KeyValue.Type.Put.getCode(), 
+                      new byte[0]
+                  );
+                  dlqResults.add(Result.create(java.util.Arrays.asList(dlqMarker)));
+              }
+          };
+          scanner = ((com.google.cloud.bigtable.hbase.AbstractBigtableTable) table).getScanner(scan, adapter);
+      } else {
+          scanner = table.getScanner(scan);
+      }
     }
 
     /** Calls {@link ResultScanner#next()}. */
@@ -747,18 +764,66 @@ public class CloudBigtableIO {
       }
     }
 
+    private transient Result bufferedResult = null;
+
     private boolean tryAdvance() throws IOException {
       try {
-        Result row = scanner.next();
-        lastScannedRow = row;
-        if (row != null && rangeTracker.tryReturnRecordAt(true, ByteKey.copyFrom(row.getRow()))) {
-          current = row;
-          rowsRead.addAndGet(1l);
-          return true;
-        } else {
-          current = null;
-          rangeTracker.markDone();
-          return false;
+        while (true) {
+          // ALWAYS fetch the next row if the buffer is empty, even if DLQ markers exist!
+          // This ensures we never yield a DLQ marker prematurely if the internal client retried.
+          if (bufferedResult == null) {
+            Result row = scanner.next();
+            if (row != null) {
+                bufferedResult = row;
+            }
+          }
+
+          Result rowToYield = null;
+          if (dlqResults != null && !dlqResults.isEmpty()) {
+              Result dlqRow = dlqResults.peek();
+              if (bufferedResult != null) {
+                  byte[] dlqKey = dlqRow.getRow();
+                  byte[] healthyKey = bufferedResult.getRow();
+                  int cmp = org.apache.hadoop.hbase.util.Bytes.compareTo(dlqKey, healthyKey);
+                  if (cmp <= 0) {
+                      rowToYield = dlqResults.poll();
+                      if (cmp == 0) {
+                          bufferedResult = null; 
+                      }
+                  } else {
+                      rowToYield = bufferedResult;
+                      bufferedResult = null;
+                  }
+              } else {
+                  rowToYield = dlqResults.poll();
+              }
+          } else {
+              rowToYield = bufferedResult;
+              bufferedResult = null;
+          }
+
+          if (rowToYield == null) {
+            current = null;
+            rangeTracker.markDone();
+            return false;
+          }
+
+          lastScannedRow = rowToYield;
+
+          // Deduplicate: If this row has the same key as the last yielded row, ignore it and fetch the next!
+          if (current != null && org.apache.hadoop.hbase.util.Bytes.equals(rowToYield.getRow(), current.getRow())) {
+              continue;
+          }
+
+          if (rangeTracker.tryReturnRecordAt(true, ByteKey.copyFrom(rowToYield.getRow()))) {
+            current = rowToYield;
+            rowsRead.addAndGet(1l);
+            return true;
+          } else {
+            current = null;
+            rangeTracker.markDone();
+            return false;
+          }
         }
       } catch (Exception e) {
         throw e;
@@ -766,6 +831,11 @@ public class CloudBigtableIO {
     }
 
     private void resetScanner() throws IOException {
+      if (dlqResults != null) {
+          dlqResults.clear();
+      }
+      bufferedResult = null;
+      
       CloudBigtableScanConfiguration scanConfiguration = source.getConfiguration();
       Scan scan;
       if (lastScannedRow != null) {

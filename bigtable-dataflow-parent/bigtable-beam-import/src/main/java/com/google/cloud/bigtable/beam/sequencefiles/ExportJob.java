@@ -254,8 +254,10 @@ public class ExportJob {
     ValueProvider<String> tableId = opts.getBigtableTableId();
 
     org.apache.beam.sdk.values.PCollection<Result> processedRows = pipeline
-        .apply("Read table", Read.from(CloudBigtableIO.read(config)))
-        .apply("Process Large Rows", ParDo.of(new DoFn<Result, Result>() {
+        .apply("Read table", Read.from(CloudBigtableIO.read(config)));
+
+    if (opts.getSkipLargeRows()) {
+        processedRows = processedRows.apply("Process Large Rows", ParDo.of(new DoFn<Result, Result>() {
 
             @ProcessElement
             public void processElement(ProcessContext c) {
@@ -275,7 +277,9 @@ public class ExportJob {
                             c.output(fullResult);
                         }
                     } catch (Exception e) {
-                        throw new RuntimeException("Failed to read large row", e);
+                        // If pagination completely fails (e.g. a single cell exceeds 256MB),
+                        // output the original DLQ marker so it gets routed to the DLQ sink!
+                        c.output(r);
                     } finally {
                         if (client != null) {
                             try { client.close(); } catch (Exception ex) {}
@@ -286,6 +290,7 @@ public class ExportJob {
                 }
             }
         }));
+    }
 
     processedRows
         .apply("Format results", MapElements.via(new ResultToKV()))

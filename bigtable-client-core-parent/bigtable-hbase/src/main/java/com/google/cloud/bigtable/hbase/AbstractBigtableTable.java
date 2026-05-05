@@ -300,16 +300,14 @@ public abstract class AbstractBigtableTable implements Table {
     }
   }
 
-  /** {@inheritDoc} */
-  @Override
-  public ResultScanner getScanner(final Scan scan) throws IOException {
-    LOG.trace("getScanner(Scan)");
+  public ResultScanner getScanner(final Scan scan, com.google.cloud.bigtable.data.v2.models.RowAdapter<com.google.cloud.bigtable.data.v2.models.Row> rowAdapter) throws IOException {
+    LOG.trace("getScanner(Scan, RowAdapter)");
     Span span = TRACER.spanBuilder("BigtableTable.scan").startSpan();
     try (Scope scope = TRACER.withSpan(span)) {
       ResultScanner scanner;
       if (scan.getCaching() == -1) {
-        if (getConfiguration().getBoolean("google.bigtable.skip.large.rows", false)) {
-          scanner = clientWrapper.readRowsWithDLQ(hbaseAdapter.adapt(scan));
+        if (rowAdapter != null) {
+          scanner = clientWrapper.readRows(hbaseAdapter.adapt(scan), rowAdapter);
         } else {
           scanner = clientWrapper.readRows(hbaseAdapter.adapt(scan));
         }
@@ -321,19 +319,22 @@ public abstract class AbstractBigtableTable implements Table {
       if (hasWhileMatchFilter(scan.getFilter())) {
         return Adapters.BIGTABLE_WHILE_MATCH_RESULT_RESULT_SCAN_ADAPTER.adapt(scanner, span);
       }
-      // TODO: need to end the span when stream ends
       return scanner;
     } catch (Throwable throwable) {
       LOG.error("Encountered exception when executing getScanner.", throwable);
       span.setStatus(Status.UNKNOWN);
-      // Close the span only when throw an exception and not on finally because if no exception
-      // the span will be ended by the adapter.
       span.end();
       throw new IOException(
           makeGenericExceptionMessage(
               "getScanner", settings.getProjectId(), tableName.getQualifierAsString()),
           throwable);
     }
+  }
+
+  /** {@inheritDoc} */
+  @Override
+  public ResultScanner getScanner(final Scan scan) throws IOException {
+      return getScanner(scan, null);
   }
 
   public static boolean hasWhileMatchFilter(Filter filter) {
