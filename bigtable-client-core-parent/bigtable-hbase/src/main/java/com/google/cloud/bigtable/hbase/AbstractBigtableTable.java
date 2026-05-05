@@ -300,7 +300,12 @@ public abstract class AbstractBigtableTable implements Table {
     }
   }
 
-  public ResultScanner getScanner(final Scan scan, com.google.cloud.bigtable.data.v2.models.RowAdapter<com.google.cloud.bigtable.data.v2.models.Row> rowAdapter) throws IOException {
+  public ResultScanner getScanner(
+      final Scan scan,
+      com.google.cloud.bigtable.data.v2.models.RowAdapter<
+              com.google.cloud.bigtable.data.v2.models.Row>
+          rowAdapter)
+      throws IOException {
     LOG.trace("getScanner(Scan, RowAdapter)");
     Span span = TRACER.spanBuilder("BigtableTable.scan").startSpan();
     try (Scope scope = TRACER.withSpan(span)) {
@@ -334,7 +339,7 @@ public abstract class AbstractBigtableTable implements Table {
   /** {@inheritDoc} */
   @Override
   public ResultScanner getScanner(final Scan scan) throws IOException {
-      return getScanner(scan, null);
+    return getScanner(scan, null);
   }
 
   public static boolean hasWhileMatchFilter(Filter filter) {

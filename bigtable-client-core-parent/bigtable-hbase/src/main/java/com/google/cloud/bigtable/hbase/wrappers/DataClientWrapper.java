@@ -83,7 +83,11 @@ public interface DataClientWrapper extends AutoCloseable {
   ResultScanner readRows(Query request);
 
   /** Perform a scan over {@link Result}s, in key order, with a custom RowAdapter. */
-  ResultScanner readRows(Query request, com.google.cloud.bigtable.data.v2.models.RowAdapter<com.google.cloud.bigtable.data.v2.models.Row> adapter);
+  ResultScanner readRows(
+      Query request,
+      com.google.cloud.bigtable.data.v2.models.RowAdapter<
+              com.google.cloud.bigtable.data.v2.models.Row>
+          adapter);
 
   /** Read multiple {@link Result}s into an in-memory list, in key order. */
   ApiFuture<List<Result>> readRowsAsync(Query request);

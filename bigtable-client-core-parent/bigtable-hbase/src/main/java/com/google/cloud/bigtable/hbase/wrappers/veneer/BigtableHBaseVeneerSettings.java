@@ -488,8 +488,6 @@ public class BigtableHBaseVeneerSettings extends BigtableHBaseSettings {
           .setJwtAudience(jwtAudienceOverride.get());
     }
 
-    
-
     final InstantiatingGrpcChannelProvider.Builder channelProvider =
         ((InstantiatingGrpcChannelProvider) stubSettings.getTransportChannelProvider()).toBuilder();
 

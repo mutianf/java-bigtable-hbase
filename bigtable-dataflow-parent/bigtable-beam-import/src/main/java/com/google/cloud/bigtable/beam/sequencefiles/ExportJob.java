@@ -35,20 +35,17 @@ import org.apache.beam.sdk.options.Description;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
 import org.apache.beam.sdk.options.ValueProvider;
 import org.apache.beam.sdk.options.ValueProvider.NestedValueProvider;
+import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.MapElements;
+import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.transforms.SerializableFunction;
 import org.apache.beam.sdk.transforms.SimpleFunction;
 import org.apache.beam.sdk.values.KV;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.mapreduce.ResultSerialization;
-import org.apache.hadoop.io.serializer.WritableSerialization;
-import org.apache.beam.sdk.values.PCollectionTuple;
-import org.apache.beam.sdk.values.TupleTag;
-import org.apache.beam.sdk.values.TupleTagList;
-import org.apache.beam.sdk.transforms.DoFn;
-import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.io.serializer.WritableSerialization;
 
 /**
  * Beam job to export a Bigtable table to a set of SequenceFiles. Afterwards, the files can be
@@ -229,12 +226,15 @@ public class ExportJob {
             Result.class,
             ResultSerialization.class);
 
-    ValueProvider<String> dlqPrefixStr = NestedValueProvider.of(opts.getFilenamePrefix(), new SerializableFunction<String, String>() {
-      @Override
-      public String apply(String input) {
-        return input + "-dlq";
-      }
-    });
+    ValueProvider<String> dlqPrefixStr =
+        NestedValueProvider.of(
+            opts.getFilenamePrefix(),
+            new SerializableFunction<String, String>() {
+              @Override
+              public String apply(String input) {
+                return input + "-dlq";
+              }
+            });
     FilePathPrefix dlqPrefix = new FilePathPrefix(destinationPath, dlqPrefixStr);
 
     SequenceFileSink<ImmutableBytesWritable, Result> dlqSink =
@@ -248,48 +248,116 @@ public class ExportJob {
 
     Pipeline pipeline = Pipeline.create(Utils.tweakOptions(opts));
     CloudBigtableScanConfiguration config = TemplateUtils.buildExportConfig(opts);
-    
+
     ValueProvider<String> projectId = opts.getBigtableProject();
     ValueProvider<String> instanceId = opts.getBigtableInstanceId();
     ValueProvider<String> tableId = opts.getBigtableTableId();
 
-    org.apache.beam.sdk.values.PCollection<Result> processedRows = pipeline
-        .apply("Read table", Read.from(CloudBigtableIO.read(config)));
+    org.apache.beam.sdk.values.PCollection<Result> processedRows =
+        pipeline.apply("Read table", Read.from(CloudBigtableIO.read(config)));
 
     if (opts.getSkipLargeRows()) {
-        processedRows = processedRows.apply("Process Large Rows", ParDo.of(new DoFn<Result, Result>() {
+      processedRows =
+          processedRows.apply(
+              "Process Large Rows",
+              ParDo.of(
+                  new DoFn<Result, Result>() {
 
-            @ProcessElement
-            public void processElement(ProcessContext c) {
-                Result r = c.element();
-                if (r.containsColumn(Bytes.toBytes("__BEAM_DLQ_LARGE_ROW__"), Bytes.toBytes(""))) {
-                    com.google.bigtable.repackaged.com.google.protobuf.ByteString rowKey = 
-                        com.google.bigtable.repackaged.com.google.protobuf.ByteString.copyFrom(r.getRow());
-                    
-                    com.google.bigtable.repackaged.com.google.cloud.bigtable.data.v2.BigtableDataClient client = null;
-                    try {
-                        client = com.google.bigtable.repackaged.com.google.cloud.bigtable.data.v2.BigtableDataClient.create(projectId.get(), instanceId.get());
-                        com.google.bigtable.repackaged.com.google.cloud.bigtable.data.v2.models.Row largeRow = 
-                            com.google.bigtable.repackaged.com.google.cloud.bigtable.data.v2.stub.readrows.LargeRowPaginationUtil.readLargeRow(
-                                client, tableId.get(), rowKey, null);
-                        if (largeRow != null) {
-                            Result fullResult = com.google.cloud.bigtable.hbase.adapters.Adapters.ROW_ADAPTER.adaptResponse(largeRow);
+                    @ProcessElement
+                    public void processElement(ProcessContext c) {
+                      Result r = c.element();
+                      if (r.containsColumn(
+                          Bytes.toBytes("__BEAM_DLQ_LARGE_ROW__"), Bytes.toBytes(""))) {
+                        com.google.bigtable.repackaged.com.google.protobuf.ByteString rowKey =
+                            com.google.bigtable.repackaged.com.google.protobuf.ByteString.copyFrom(
+                                r.getRow());
+
+                        com.google.bigtable.repackaged.com.google.cloud.bigtable.data.v2
+                                .BigtableDataClient
+                            client = null;
+                        try {
+                          client =
+                              com.google.bigtable.repackaged.com.google.cloud.bigtable.data.v2
+                                  .BigtableDataClient.create(projectId.get(), instanceId.get());
+                          com.google.bigtable.repackaged.com.google.cloud.bigtable.data.v2.models
+                                  .Row
+                              strippedRow =
+                                  client.readRow(
+                                      tableId.get(),
+                                      rowKey,
+                                      com.google.bigtable.repackaged.com.google.cloud.bigtable.data
+                                          .v2.models.Filters.FILTERS
+                                          .value()
+                                          .strip());
+                          int cellCount = strippedRow != null ? strippedRow.getCells().size() : 0;
+                          int initialLimit = Math.max(1, cellCount / 2);
+
+                          com.google.bigtable.repackaged.com.google.cloud.bigtable.data.v2.stub
+                                  .readrows.LargeRowPaginator
+                              paginator =
+                                  new com.google.bigtable.repackaged.com.google.cloud.bigtable.data
+                                      .v2.stub.readrows.LargeRowPaginator(initialLimit, null);
+                          java.util.List<
+                                  com.google.bigtable.repackaged.com.google.cloud.bigtable.data.v2
+                                      .models.RowCell>
+                              resultCells = new java.util.ArrayList<>();
+
+                          while (paginator.hasNext()) {
+                            try {
+                              com.google.bigtable.repackaged.com.google.cloud.bigtable.data.v2
+                                      .models.Filters.Filter
+                                  chunkFilter = paginator.getNextFilter();
+                              com.google.bigtable.repackaged.com.google.cloud.bigtable.data.v2
+                                      .models.Row
+                                  partialRow = client.readRow(tableId.get(), rowKey, chunkFilter);
+
+                              if (partialRow == null || partialRow.getCells().isEmpty()) {
+                                break;
+                              }
+                              resultCells.addAll(partialRow.getCells());
+                              paginator.advance(partialRow.getCells().size());
+                            } catch (
+                                com.google.bigtable.repackaged.com.google.api.gax.rpc.ApiException
+                                    e) {
+                              if (e.getStatusCode().getCode()
+                                      == com.google.bigtable.repackaged.com.google.api.gax.rpc
+                                          .StatusCode.Code.FAILED_PRECONDITION
+                                  || e.getMessage().contains("missed heartbeat")) {
+                                paginator.halveLimit();
+                              } else {
+                                throw e;
+                              }
+                            }
+                          }
+
+                          if (!resultCells.isEmpty()) {
+                            com.google.bigtable.repackaged.com.google.cloud.bigtable.data.v2.models
+                                    .Row
+                                largeRow =
+                                    com.google.bigtable.repackaged.com.google.cloud.bigtable.data.v2
+                                        .models.Row.create(rowKey, resultCells);
+                            Result fullResult =
+                                com.google.cloud.bigtable.hbase.adapters.Adapters.ROW_ADAPTER
+                                    .adaptResponse(largeRow);
                             c.output(fullResult);
+                          }
+                        } catch (Exception e) {
+                          // If pagination completely fails (e.g. a single cell exceeds 256MB),
+                          // output the original DLQ marker so it gets routed to the DLQ sink!
+                          c.output(r);
+                        } finally {
+                          if (client != null) {
+                            try {
+                              client.close();
+                            } catch (Exception ex) {
+                            }
+                          }
                         }
-                    } catch (Exception e) {
-                        // If pagination completely fails (e.g. a single cell exceeds 256MB),
-                        // output the original DLQ marker so it gets routed to the DLQ sink!
+                      } else {
                         c.output(r);
-                    } finally {
-                        if (client != null) {
-                            try { client.close(); } catch (Exception ex) {}
-                        }
+                      }
                     }
-                } else {
-                    c.output(r);
-                }
-            }
-        }));
+                  }));
     }
 
     processedRows

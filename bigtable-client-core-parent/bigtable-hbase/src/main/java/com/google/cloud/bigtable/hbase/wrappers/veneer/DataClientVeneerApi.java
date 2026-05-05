@@ -152,7 +152,11 @@ public class DataClientVeneerApi implements DataClientWrapper {
   }
 
   @Override
-  public ResultScanner readRows(Query request, com.google.cloud.bigtable.data.v2.models.RowAdapter<com.google.cloud.bigtable.data.v2.models.Row> adapter) {
+  public ResultScanner readRows(
+      Query request,
+      com.google.cloud.bigtable.data.v2.models.RowAdapter<
+              com.google.cloud.bigtable.data.v2.models.Row>
+          adapter) {
     ServerStream<com.google.cloud.bigtable.data.v2.models.Row> stream =
         delegate.skipLargeRowsCallable(adapter).call(request, createScanCallContext());
     return new CustomRowResultScanner(stream);
@@ -417,7 +421,8 @@ public class DataClientVeneerApi implements DataClientWrapper {
     private final ServerStream<com.google.cloud.bigtable.data.v2.models.Row> serverStream;
     private final java.util.Iterator<com.google.cloud.bigtable.data.v2.models.Row> iterator;
 
-    CustomRowResultScanner(ServerStream<com.google.cloud.bigtable.data.v2.models.Row> serverStream) {
+    CustomRowResultScanner(
+        ServerStream<com.google.cloud.bigtable.data.v2.models.Row> serverStream) {
       this.serverStream = serverStream;
       this.iterator = serverStream.iterator();
     }
@@ -431,7 +436,8 @@ public class DataClientVeneerApi implements DataClientWrapper {
         }
 
         scannerResultMeter.mark();
-        return com.google.cloud.bigtable.hbase.adapters.Adapters.ROW_ADAPTER.adaptResponse(iterator.next());
+        return com.google.cloud.bigtable.hbase.adapters.Adapters.ROW_ADAPTER.adaptResponse(
+            iterator.next());
       }
     }
 

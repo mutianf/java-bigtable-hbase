@@ -94,7 +94,11 @@ class SharedDataClientWrapper implements DataClientWrapper {
   }
 
   @Override
-  public ResultScanner readRows(Query request, com.google.cloud.bigtable.data.v2.models.RowAdapter<com.google.cloud.bigtable.data.v2.models.Row> adapter) {
+  public ResultScanner readRows(
+      Query request,
+      com.google.cloud.bigtable.data.v2.models.RowAdapter<
+              com.google.cloud.bigtable.data.v2.models.Row>
+          adapter) {
     return delegate.readRows(request, adapter);
   }
 
